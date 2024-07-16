@@ -199,46 +199,26 @@ RS.hoo.cif.combined.rules = list(
   cif.sender.column = c("role", "language", "handwriting", "userID", "chatGroup"), 
   cif.receiver.column = c("language", "handwriting", "userID", "chatGroup"), 
   cif.exception.rule = tma:::cif_exceptions(
-    if(modality == "resource" & sender.role == "Player" & ... )
-      ...
-    rule_1 = list(adjust.type = window.type, 
-                  adjust.num = 1,
-                  adjust.element = c("resource", "Player", "L2","poor", NA, NA, 
-                                     "L1", "good", NA, NA)
-                  ),
-    rule_2 = list(adjust.type = window.type, 
-                  adjust.num = 2,
-                  adjust.element = c("chatting",NA,NA,NA, NA,NA, 
-                                     "L2",NA,NA,NA)
-                  ),
-    rule_3 = list(adjust.type = weight.type, 
-                  adjust.num = 0.5,
-                  adjust.element = c("chatting", "Player", "L2", "poor",NA,NA,
-                                     NA,NA,NA,NA)
-                  ), 
-    rule_4 = list(adjust.type = weight.type, 
-                  adjust.num = 2,
-                  adjust.element = c("chatting", "Mentor",NA, "good", NA,NA,
-                                     "L2",NA, NA,NA)
-                  ), 
-
-    rule_5 = list(adjust.type = weight.type, 
-                  adjust.num = 0,
-                  adjust.element = c(NA, NA,NA, NA,NA,chatGroup,
-                                     NA,NA, NA,chatGroup), 
-                  unmatched.element = c(NA,NA,NA,NA,NA,TRUE,
-                                      NA,NA,NA,TRUE)
-                  ), 
-    rule_6 = list(adjust.type = weight.type, 
-                  adjust.num = 0,
-                  adjust.element = c("resource", NA,NA, NA,userID,chatGroup,
-                                     NA,NA, userID,chatGroup), 
-                  matched.element = c(NA,NA,NA,NA,NA,TRUE,
-                                      NA,NA,NA,TRUE), 
-                  unmatched.element = c(NA,NA,NA,NA,TRUE,NA,
-                                      NA,NA,TRUE,NA)
-                  )
-    )
+    if(modality == "resource" & sender.role == "Player" & sender.language == "L2" & 
+       sender.handwriting == "poor" & receiver.language == "L1" & receiver.handwriting == "good") {
+      adjust.window = 1
+    }, 
+    if (modality == "chatting" & receiver.language == "L2") {
+      adjust.window = 2
+    },
+    if (modality == "chatting" & sender.role == "Player" & sender.language == "L2" & sender.handwriting == "poor") {
+      adjust.weight = 0.5
+    },
+    if (modality == "chatting" & sender.role == "Mentor" & sender.handwriting == "good" & receiver.language == "L2") {
+      adjust.weight = 2
+    },
+    if (modality == "chat" & sender.chatGroup != receiver.chatGroup) {
+      adjust.weight = 0
+    },
+    if (modality == "resource" & (sender.userID != receiver.userID | sender.chatGroup == receiver.chatGroup))     {
+      adjust.weight = 0
+    }
+  )
 )
 accum_unordered <- tma:::accumulate_contexts (
     x = df,
