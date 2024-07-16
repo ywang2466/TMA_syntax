@@ -1,0 +1,251 @@
+---
+title: "TMA syntax design: accumulation using context impact function"
+output: html_notebook
+---
+```{r}
+df <- read.csv(file = "mock_data_edited.csv")
+```
+
+Old syntax
+```{r}
+unit_cols <- c("userID")
+
+codes <- c("A", "B", "C")
+
+HOO_rules_model <- tma:::rules(
+  modality %in% "chat" & chatGroup %in% UNIT$chatGroup & Condition %in% UNIT$Condition, 
+  modality %in% "resource" & userID %in% UNIT$userID & Condition %in% UNIT$Condition
+)
+
+context_model <- tma:::contexts(
+  x = df,
+  units = unit_cols,
+  hoo_rules = HOO_rules_model
+)
+
+accum_unordered <- tma:::accumulate_contexts (
+    x = context_model,
+    codes = codes,
+    weight.by = function(x) { x },
+    decay.function = function(x) {
+        modality_effect <- c("chat" = 2, "resource" = 4) 
+        modality <- FULL_CONTEXT[ROWS, modality]
+        weight <- (x < (modality_effect[modality])) * 1
+        return (weight)
+    },
+    time.column = "timeStamp",
+    return.ena.set = TRUE
+)
+
+```
+
+Solution 1: Multidimensional array based 
+
+Shortcut of TIF only (modify window length based on modalities)
+```{r}
+unit_cols <- c("userID")
+
+codes <- c("A", "B", "C")
+
+HOO_rules_model <- tma:::rules(
+  modality %in% "chat" & chatGroup %in% UNIT$chatGroup & Condition %in% UNIT$Condition, 
+  modality %in% "resource" & userID %in% UNIT$userID & Condition %in% UNIT$Condition
+)
+
+context_model <- tma:::contexts(
+  x = df,
+  units = unit_cols,
+  hoo_rules = HOO_rules_model
+)
+
+accum_unordered <- tma:::accumulate_contexts (
+    x = context_model,
+    codes = codes,
+    time.column = "timeStamp",
+    return.ena.set = TRUE,
+    based.window = 0,
+    mode.column = "modality",
+    mode.values = c("chat" = 2, "resource" = 4)
+)
+```
+
+Most general case:
+```{r}
+unit_cols <- c("userID")
+
+codes <- c("A", "B", "C")
+
+RS.hoo.cif.combined.rules = list(
+  cif.base.window = 4, 
+  cif.base.weight = 1,
+  cif.mode.column = "modality", 
+  cif.sender.column = c("role", "language", "handwriting", "userID", "chatGroup"), 
+  cif.receiver.column = c("language", "handwriting", "userID", "chatGroup"), 
+  cif.exception.rule = tma:::cif_exceptions(
+    rule_1 = list(adjust.type = window.type, 
+                  adjust.num = 1,
+                  adjust.element = c("resource", "Player", "L2","poor", NA, NA, 
+                                     "L1", "good", NA, NA)
+                  ),
+    rule_2 = list(adjust.type = window.type, 
+                  adjust.num = 2,
+                  adjust.element = c("chatting",NA,NA,NA, NA,NA, 
+                                     "L2",NA,NA,NA)
+                  ),
+    rule_3 = list(adjust.type = weight.type, 
+                  adjust.num = 0.5,
+                  adjust.element = c("chatting", "Player", "L2", "poor",NA,NA,
+                                     NA,NA,NA,NA)
+                  ), 
+    rule_4 = list(adjust.type = weight.type, 
+                  adjust.num = 2,
+                  adjust.element = c("chatting", "Mentor",NA, "good", NA,NA,
+                                     "L2",NA, NA,NA)
+                  ), 
+
+    rule_5 = list(adjust.type = weight.type, 
+                  adjust.num = 0,
+                  adjust.element = c(NA, NA,NA, NA,NA,chatGroup,
+                                     NA,NA, NA,chatGroup), 
+                  unmatched.element = c(NA,NA,NA,NA,NA,TRUE,
+                                      NA,NA,NA,TRUE)
+                  ), 
+    rule_6 = list(adjust.type = weight.type, 
+                  adjust.num = 0,
+                  adjust.element = c("resource", NA,NA, NA,userID,chatGroup,
+                                     NA,NA, userID,chatGroup), 
+                  matched.element = c(NA,NA,NA,NA,NA,TRUE,
+                                      NA,NA,NA,TRUE), 
+                  unmatched.element = c(NA,NA,NA,NA,TRUE,NA,
+                                      NA,NA,TRUE,NA)
+                  )
+    )
+)
+accum_unordered <- tma:::accumulate_contexts (
+    x = df,
+    codes = codes,
+    time.column = "timeStamp",
+    return.ena.set = TRUE,
+    hoo.rules = RS.hoo.rules, 
+    cif.rules = RS.cif.rules
+)
+```
+```{r}
+unit_cols <- c("userID")
+
+codes <- c("A", "B", "C")
+
+HOO_rules_model <- tma:::rules(
+  modality %in% "chat" & chatGroup %in% UNIT$chatGroup & Condition %in% UNIT$Condition, 
+  modality %in% "resource" & userID %in% UNIT$userID & Condition %in% UNIT$Condition
+)
+
+context_model <- tma:::contexts(
+  x = df,
+  units = unit_cols,
+  hoo_rules = HOO_rules_model
+)
+
+accum_unordered <- tma:::accumulate_contexts (
+    x = context_model,
+    codes = codes,
+    time.column = "timeStamp",
+    return.ena.set = TRUE,
+    base.window = 4, 
+    base.weight = 1,
+    # adjust.type = c(window.type,weight.type), # adjust.type = window.type or adjust.type = weight.type 
+    cif.mode.column = "modality", 
+    cif.sender.column = c("role", "language", "handwriting"), 
+    cif.receiver.column = c("language", "handwriting"), 
+    cif.exception.rule = tma:::cif_exceptions(
+      rule_1 = list(adjust.type = window.type, 
+                    adjust.num = 1,
+                    adjust.element = c("resource", "Player", "L2", "poor", "L1", "good")
+                   ),
+      rule_2 = list(adjust.type = window.type, 
+                    adjust.num = 2,
+                    adjust.element = c("chatting",NA,NA,NA,"L2",NA)
+                    ),
+      rule_3 = list(adjust.type = weight.type, 
+                    adjust.num = 0.5,
+                    adjust.element = c("chatting", "Player", "L2", "poor",NA,NA), 
+                    ), 
+      rule_4 = list(adjust.type = weight.type, 
+                    adjust.num = 2,
+                    adjust.element = c("chatting", "Mentor",NA, "good", "L2",NA), 
+                    )
+      )
+)
+```
+Based on the variables specified for mode.column, sender.column, and receiver.column, TMA creates a multidimensional array to record windows and weights for different contexts. The dimension $d$ of this multidimensional array is the same as total number of variables specified for the three arguments. 
+
+Error scenarios:
+1. If the length of adjust.element vectors in exception.rule is not matched with $d$, throw error message "Incorrect dimension specification."
+2. If two exception rules try to modify the same element in the multidimensional array to two different values, throw error message "Conflicts in modifying exceptions."
+3. If the values adjust.element vectors in the exception.rule don't match with the unique values of the corresponding specified variable, throw error message "Value not found in the specified column for mode.column/sender.column/receiver.column."
+
+
+Solution 2: Rule based
+
+```{r}
+unit_cols <- c("userID")
+
+codes <- c("A", "B", "C")
+
+RS.hoo.cif.combined.rules = list(
+  cif.base.window = 4, 
+  cif.base.weight = 1,
+  cif.mode.column = "modality", 
+  cif.sender.column = c("role", "language", "handwriting", "userID", "chatGroup"), 
+  cif.receiver.column = c("language", "handwriting", "userID", "chatGroup"), 
+  cif.exception.rule = tma:::cif_exceptions(
+    if(modality == "resource" & sender.role == "Player" & ... )
+      ...
+    rule_1 = list(adjust.type = window.type, 
+                  adjust.num = 1,
+                  adjust.element = c("resource", "Player", "L2","poor", NA, NA, 
+                                     "L1", "good", NA, NA)
+                  ),
+    rule_2 = list(adjust.type = window.type, 
+                  adjust.num = 2,
+                  adjust.element = c("chatting",NA,NA,NA, NA,NA, 
+                                     "L2",NA,NA,NA)
+                  ),
+    rule_3 = list(adjust.type = weight.type, 
+                  adjust.num = 0.5,
+                  adjust.element = c("chatting", "Player", "L2", "poor",NA,NA,
+                                     NA,NA,NA,NA)
+                  ), 
+    rule_4 = list(adjust.type = weight.type, 
+                  adjust.num = 2,
+                  adjust.element = c("chatting", "Mentor",NA, "good", NA,NA,
+                                     "L2",NA, NA,NA)
+                  ), 
+
+    rule_5 = list(adjust.type = weight.type, 
+                  adjust.num = 0,
+                  adjust.element = c(NA, NA,NA, NA,NA,chatGroup,
+                                     NA,NA, NA,chatGroup), 
+                  unmatched.element = c(NA,NA,NA,NA,NA,TRUE,
+                                      NA,NA,NA,TRUE)
+                  ), 
+    rule_6 = list(adjust.type = weight.type, 
+                  adjust.num = 0,
+                  adjust.element = c("resource", NA,NA, NA,userID,chatGroup,
+                                     NA,NA, userID,chatGroup), 
+                  matched.element = c(NA,NA,NA,NA,NA,TRUE,
+                                      NA,NA,NA,TRUE), 
+                  unmatched.element = c(NA,NA,NA,NA,TRUE,NA,
+                                      NA,NA,TRUE,NA)
+                  )
+    )
+)
+accum_unordered <- tma:::accumulate_contexts (
+    x = df,
+    codes = codes,
+    time.column = "timeStamp",
+    return.ena.set = TRUE,
+    hoo.rules = RS.hoo.rules, 
+    cif.rules = RS.cif.rules
+)
+```
